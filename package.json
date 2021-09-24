@@ -1,0 +1,22 @@
+{
+  "name": "scrapper",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./bin/www"
+  },
+  "dependencies": {
+    "axios": "^0.21.1",
+    "blob": "^0.1.0",
+    "cookie-parser": "~1.4.4",
+    "cors": "^2.8.5",
+    "debug": "~2.6.9",
+    "express": "~4.16.1",
+    "mongoose": "^5.12.13",
+    "morgan": "~1.9.1",
+    "puppeteer": "^7.1.0",
+    "request": "^2.88.2",
+    "request-promise": "^4.2.6",
+    "xmlhttprequest": "^1.8.0"
+  }
+}
