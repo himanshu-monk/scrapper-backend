@@ -1,7 +1,7 @@
 var express = require('express');
 var router = express.Router();
 const scrapper = require('../test');
-const data = require('../file')
+// const data = require('../file')
 const Profile = require('../models/profileModel');
 
 router.get("/", (req, res) => {
@@ -22,18 +22,19 @@ router.get("/", (req, res) => {
 // });
 
 router.post("/profiles", async (req, res) => {
-  // const query = await req.body;
+  const query = req.body;
+  console.log(query)
   const dbData = await Profile.find({});
-  res.send({dbData: dbData.length});
-  // const data = await scrapper(query, dbData);
-  // let count = 0;
-  // data.forEach(async(item) => {
-  //   const newData = await Profile(item);
-  //   newData.save().then(() => { count++ })
-  // })
-  // res.send({ count, data: data.length });
-  // // const newData = await Profile(data);
-  // Profile.insertMany(data).then(() => res.send({ message: `Scrapped count: ${data.length}` })).catch(err => res.send(err))
+  // res.send({dbData: dbData.length});
+  const data = await scrapper(query, dbData);
+  let count = 0;
+  data.forEach(async(item) => {
+    const newData = await Profile(item);
+    newData.save().then(() => { count++ })
+  })
+  // return res.send({ data });
+  // const newData = await Profile(data);
+  Profile.insertMany(data).then(() => res.send({ message: `Scrapped count: ${data.length}` })).catch(err => res.send(err))
 })
 
 router.get("/view/:profileId", async (req, res) => {

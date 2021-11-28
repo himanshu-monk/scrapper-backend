@@ -4,12 +4,12 @@ const fs = require('fs')
 const path = require('path')
 const Axios = require('axios')
 const request = require('request-promise');
-const { isBoolean } = require("util");
+const createResumeLink = require("./download");
 
 const scrapper = async (query, dbData) => {
     try {
         const browser = await puppeteer.connect({
-            browserWSEndpoint: "ws://localhost:9222/devtools/browser/d19783a5-5860-414d-bc01-b2cb32dff023"
+            browserWSEndpoint: "ws://127.0.0.1:9222/devtools/browser/c46e06ca-0185-49e7-a3d0-d6ae17ac98d8"
             ,
             defaultViewport: null,
             args: ['--start-maximized']
@@ -34,11 +34,6 @@ const scrapper = async (query, dbData) => {
         //     }
         // });
 
-        var functionToInject = function () {
-            return window.location.href;
-        }
-
-        var currentUrl = await page.evaluate(functionToInject);
 
         if (query.isBooleanOn) {
             await page.click('#advSrchFrm > article > div.advS > div.advSCont > div.mainSec > div:nth-child(2) > div.form-rowR > div.oh > p > a');
@@ -83,18 +78,18 @@ const scrapper = async (query, dbData) => {
         //await page.click('#srchSticky > input.btn-large.btn-primary.searchBtn.btnIcon');
         // await page.type(String.fromCharCode(13))
         await page.waitForNavigation();
-        await page.click('#clstAccord > a:nth-child(4)');
-        await page.waitForSelector('#kwd');
-        await page.type('#kwd', 'Java AND (Spring OR SpringMVC OR Hibernate OR ORM) AND (SQL OR mYSQL OR Mongo OR Mongodb OR NoSQL OR Hbase OR HDFS OR Oracle OR PLSQL OR postgre)')
-        await page.click('#clstSbt');
-        await page.waitForNavigation();
+        // await page.click('#clstAccord > a:nth-child(4)');
+        // await page.waitForSelector('#kwd');
+        // await page.type('#kwd', 'Java AND (Spring OR SpringMVC OR Hibernate OR ORM) AND (SQL OR mYSQL OR Mongo OR Mongodb OR NoSQL OR Hbase OR HDFS OR Oracle OR PLSQL OR postgre)')
+        // await page.click('#clstSbt');
+        // await page.waitForNavigation();
 
         await page.waitForSelector('#firstTupCont');
-        var response = await page.evaluate(async () => {
+        var response = await page.evaluate(async (query) => {
             var titleLinkArray = [];
             var replacer = "";
             let i = 0;
-            for (var j = 0; j < 160; j++) {
+            for (var j = 0; j < query.count; j++) {
                 if (i <= 9) {
                     replacer = '#firstTupCont';
                 } else {
@@ -130,59 +125,59 @@ const scrapper = async (query, dbData) => {
             };
             // console.log(response, "response");
             return response;
-        });
+        }, query);
 
-        // await console.log(response, "response");
         response.profiles = await filter(response.profiles);
         response.profiles = generateUID(response.profiles, dbData.length);
-        response.profiles = checkDuplicates(response.profiles, dbData);
-        return response.profiles;
+        // response.profiles = checkDuplicates(response.profiles, dbData);
+        // return response.profiles;
         let completeProfiles = [];
         let error;
         for (var i = 0; i < response.profiles.length; i++) {
             var newPagePromise = new Promise(resolve => browser.once('targetcreated', target => resolve(target.page())));
-            setTimeout(async () => {
-                await page.click(response.profiles[i].selector);
-            }, autoDelay());
+            console.log(response.profiles[i].selector, "slector")
+            await page.click(response.profiles[i].selector);
             var newPage = await newPagePromise;
-            await newPage.waitForNavigation({ waitUntil: 'load' });
+            // await newPage.waitForNavigation();
+            
+            // error = await newPage.evaluate(async () => {
+                //     return document.querySelector('body > div.wrap.errorPage');
+                // });
+                
+                // if (error) {
+                    //     console.log(error)
+                    //     await newPage.close();
+                    //     await page.close();
+                    //     break;
+                    // }
+                    
+                    await autoScroll(newPage);
+                    await newPage.setRequestInterception(true);
 
-            error = await newPage.evaluate(async () => {
-                return document.querySelector('body > div.wrap.errorPage');
-            });
-
-            if (error) {
-                console.log(error)
-                await newPage.close();
-                await page.close();
-                break;
-            }
-
-            await newPage.setRequestInterception(true);
-            await newPage.waitForSelector("#cvDwldLink");
-            await newPage.hover("#cvDwldLink");
-
-            var link = await newPage.evaluate(async () => {
-                var link = await document.querySelector("#cvDwldLink").href;
-                return link;
-            });
-
-            var xRequest = await new Promise(resolve => {
-                newPage.on('request', interceptedRequest => {
-                    interceptedRequest.abort();
-                    resolve(interceptedRequest);
+                let resume = "";
+                await newPage.waitForSelector("#cvDwldLink");
+                await newPage.hover("#cvDwldLink");
+                var link = await newPage.evaluate(async () => {
+                    var link = await document.querySelector("#cvDwldLink").href;
+                    return link;
                 });
-            });
+                console.log(link)
+                var xRequest = await new Promise(resolve => {
+                    newPage.on('request', interceptedRequest => {
+                        interceptedRequest.abort();
+                        resolve(interceptedRequest);
+                    });
+                });
 
-            var cookies = await newPage.cookies();
-            await downloadResume(response.profiles[i].name, link, xRequest, cookies);
-
-            completeProfiles[i] = await newPage.evaluate(async ({ response, i }) => {
+                var cookies = await newPage.cookies();
+                resume = await downloadResume(link, xRequest, cookies);
+            completeProfiles[i] = await newPage.evaluate(async ({ response, i, resume }) => {
                 return {
                     ...response.profiles[i],
                     description: await document.querySelector('#jump-about > span.content') && document.querySelector('#jump-about > span.content').textContent,
                     workSummary: await document.querySelector('#jump-experience > div.content') && document.querySelector('#jump-experience > div.content').textContent,
                     workExp: await document.querySelector('#mainCvWrap > div.btm-content-wrap > div > div.cv-details-container.tuple > div.cv-details-inner-wrap > div:nth-child(3) > div.content') && document.querySelector('#mainCvWrap > div.btm-content-wrap > div > div.cv-details-container.tuple > div.cv-details-inner-wrap > div:nth-child(3) > div.content').textContent,
+                    resume,
                     other: {
                         desiredJobDetails: {
                             type: await document.querySelector('#jump-other-detail > div.content.other-detail-box.clFx > div.left-container > div.desired-job-container > div:nth-child(1) > div:nth-child(3)') && document.querySelector('#jump-other-detail > div.content.other-detail-box.clFx > div.left-container > div.desired-job-container > div:nth-child(1) > div:nth-child(3)').textContent,
@@ -203,18 +198,38 @@ const scrapper = async (query, dbData) => {
                         email: await document.querySelector('#jump-other-detail > div.content.other-detail-box.clFx > div.right-container > div > div.address-box.mt10 > div.bkt4.email') && document.querySelector('#jump-other-detail > div.content.other-detail-box.clFx > div.right-container > div > div.address-box.mt10 > div.bkt4.email').textContent
                     }
                 }
-            }, { response, i });
-            await autoScroll(newPage);
-            setTimeout(async () => {
-                await newPage.close();
-            }, autoDelay());
+            }, { response, i, resume });
+            // await autoScroll(newPage);
+            // setTimeout(async () => {
+            // }, autoDelay());
+            await newPage.close();
         }
         if (error) return {profiles: response.profiles, error: "Limit exceeded"};
+        console.log(completeProfiles)
+        browser.close()
         return completeProfiles;
     } catch (err) {
         console.log(err);
         return err;
     }
+};
+
+const isResume = async (page, selector) => {
+    let link;
+	try {
+		await page.waitForSelector(selector);
+		await page.hover(selector);
+
+        link = await page.evaluate(async (selector) => {
+            var link = await document.querySelector(selector).href;
+            return link;
+        }, selector);
+		return link;
+	} catch (error) {
+		console.log(error, "error");
+        link = ""
+        return link;
+	}
 };
 
 async function filter(jsonProfiles) {
@@ -344,34 +359,52 @@ async function autoDelay() {
     return delay[Math.floor(delay.length * Math.random())];
 }
 
-async function downloadResume(name, link, xRequest, cookies) {
+
+async function downloadResume(link, xRequest, cookies) {
+    console.log(link, 1)
     var options = {
-        encoding: null,
-        method: xRequest._method,
-        uri: link,
-        body: xRequest._postData,
-        headers: xRequest._headers
+      encoding: null,
+      method: xRequest._method,
+      uri: link,
+      body: xRequest._postData,
+      headers: xRequest._headers
     }
     options.headers.Cookie = cookies.map(ck => ck.name + '=' + ck.value).join(';');
-    var res = await request(options);
+    var buf = await request(options);
+    console.log(buf)
+    const resumeLink = await createResumeLink(buf);
+    console.log("resume saved");
+    return resumeLink;
+  }
 
-    const dir = path.join(__dirname, "/./downloads/");
-    let fileName;
-    if (res[0] == 37 && res[1] == 80 && res[2] == 68 && res[3] == 70) {
-        fileName = name + '_' + (new Date()).getTime() + '.pdf';
-    } else {
-        fileName = name + '_' + (new Date()).getTime() + '.docx';
-    }
-    fs.open(`${dir}${fileName}`, 'w', (err, desc) => {
-        if (!err && desc) {
-            fs.writeFile(desc, res, (err) => {
-                if (err) throw err;
-                console.log('resume saved!', res[0]);
-            })
-        }
-    })
-    console.log(res);
-}
+// async function downloadResume(name, link, xRequest, cookies) {
+//     var options = {
+//         encoding: null,
+//         method: xRequest._method,
+//         uri: link,
+//         body: xRequest._postData,
+//         headers: xRequest._headers
+//     }
+//     options.headers.Cookie = cookies.map(ck => ck.name + '=' + ck.value).join(';');
+//     var res = await request(options);
+
+//     const dir = path.join(__dirname, "./downloads");
+//     let fileName;
+//     if (res[0] == 37 && res[1] == 80 && res[2] == 68 && res[3] == 70) {
+//         fileName = name + '_' + (new Date()).getTime() + '.pdf';
+//     } else {
+//         fileName = name + '_' + (new Date()).getTime() + '.docx';
+//     }
+//     fs.open(`${dir}${fileName}`, 'w', (err, desc) => {
+//         if (!err && desc) {
+//             fs.writeFile(desc, res, (err) => {
+//                 if (err) throw err;
+//                 console.log('resume saved!', res[0]);
+//             })
+//         }
+//     })
+//     console.log(res);
+// }
 
 const checkDuplicates = async (data, dbData) => {
     let arr = [];
